@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en" class="dark scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>YourApp - Think Better</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+    }
+  </script>
+
+  <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet" />
+  <style>
+    #particles-js {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+    }
+    #cameraView {
+      object-fit: cover;
+      z-index: 10;
+    }
+  </style>
+</head>
+
+<body class="bg-white dark:bg-black text-black dark:text-white transition-colors duration-500 relative overflow-hidden min-h-screen">
+
+  <div id="particles-js"></div>
+
+  <header class="flex justify-between items-center px-8 py-4 relative z-10">
+    <div class="space-x-4 flex items-center">
+      <button id="toggleDarkMode" class="text-sm px-3 py-1 rounded bg-gray-200 dark:bg-gray-700 dark:text-white hover:bg-gray-300 dark:hover:bg-gray-600 transition">Toggle Theme</button>
+      <button id="startTrialBtn" class="bg-purple-600 text-white px-4 py-2 rounded-full text-sm hover:bg-purple-700 transition">Start free trial</button>
+    </div>
+  </header>
+
+  <section class="flex flex-col items-center text-center mt-32 relative z-10 px-4" data-aos="fade-up">
+    <span class="text-xs bg-gray-200 dark:bg-gray-800 text-purple-500 px-3 py-1 rounded-full mb-4">Our AI Integration just landed</span>
+    <h1 class="text-5xl md:text-6xl font-extrabold mb-4">Your new<span class="text-purple-500"> Eye!!</span></h1>
+    <p class="text-lg text-gray-600 dark:text-gray-300">"When you speak, we see. Your world, recognized."</p>
+  </section>
+
+  <div id="cameraWrapper" class="fixed top-0 left-0 w-full h-full bg-black hidden z-10">
+    <video id="cameraView" autoplay playsinline muted class="w-full h-full object-cover"></video>
+
+    <div class="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex gap-4">
+      <button id="currencyBtn" class="bg-purple-600 text-white px-4 py-2 rounded-full hover:bg-purple-700 transition">Detect Currency</button>
+      <button id="coinBtn" class="bg-green-600 text-white px-4 py-2 rounded-full hover:bg-green-700 transition">Detect Coin</button>
+      <button id="stopBtn" class="bg-red-600 text-white px-4 py-2 rounded-full hover:bg-red-700 transition">Stop</button>
+    </div>
+  </div>
+
+  <div id="loadingSpinner" class="fixed bottom-6 left-6 bg-black bg-opacity-70 text-white p-4 rounded-xl shadow-xl hidden z-50">
+    <svg class="animate-spin h-5 w-5 mr-2 inline-block" viewBox="0 0 24 24">
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="white" stroke-width="4" fill="none" />
+      <path class="opacity-75" fill="white" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+    </svg>
+    Detecting...
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/particles.js@2.0.0/particles.min.js"></script>
+  <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+  <script>
+    particlesJS("particles-js", {
+      particles: {
+        number: { value: 60 },
+        color: { value: "#8b5cf6" },
+        shape: { type: "circle" },
+        opacity: { value: 0.5 },
+        size: { value: 3 },
+        line_linked: {
+          enable: true,
+          distance: 150,
+          color: "#8b5cf6",
+          opacity: 0.4,
+          width: 1
+        },
+        move: { enable: true, speed: 1 }
+      },
+      interactivity: {
+        events: {
+          onhover: { enable: true, mode: "repulse" }
+        }
+      },
+      retina_detect: true
+    });
+
+    AOS.init({ once: true });
+
+    let isListening = false;
+    let stream;
+    let currentMode = null;
+    let detectionInterval = null;
+
+    async function openCamera() {
+      try {
+        const wrapper = document.getElementById("cameraWrapper");
+        const cam = document.getElementById("cameraView");
+
+        wrapper.classList.remove("hidden");
+        cam.setAttribute("playsinline", true);
+        cam.setAttribute("muted", true);
+
+        stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        cam.srcObject = stream;
+        cam.onloadedmetadata = () => cam.play();
+
+        isListening = true;
+      } catch (err) {
+        console.error("Camera error:", err);
+        alert("Failed to access camera. Please check permissions.");
+      }
+    }
+
+    function stopDetectionMode() {
+      clearInterval(detectionInterval);
+      detectionInterval = null;
+      currentMode = null;
+      closeCamera();
+    }
+
+    function startDetectionMode(mode) {
+      if (currentMode === mode && detectionInterval) {
+        console.log("Same mode already active, skipping reset.");
+        return;
+      }
+
+      currentMode = mode;
+
+      if (detectionInterval) clearInterval(detectionInterval);
+
+      console.log("Manual command received. Detecting immediately...");
+      callModel(currentMode);
+
+      detectionInterval = setInterval(() => {
+        callModel(currentMode);
+      }, 7000);
+    }
+
+    function closeCamera() {
+      const wrapper = document.getElementById("cameraWrapper");
+      const video = document.getElementById("cameraView");
+      wrapper.classList.add("hidden");
+      if (stream) stream.getTracks().forEach(track => track.stop());
+      isListening = false;
+    }
+
+    async function callModel(mode) {
+      const video = document.getElementById("cameraView");
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d");
+
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg'));
+
+      const formData = new FormData();
+      formData.append("file", blob, "frame.jpg");
+
+      document.getElementById("loadingSpinner").classList.remove("hidden");
+
+      try {
+        const response = await fetch("http://localhost:8000/api/process?mode=" + mode, {
+          method: "POST",
+          body: formData
+        });
+
+        const result = await response.json();
+        if (result.results && result.results.length > 0) {
+          const detectedItems = result.results.map(r => `${r.currency} with ${r.confidence} confidence`).join(", ");
+          const utterance = new SpeechSynthesisUtterance("Detected " + (mode === 0 ? "currency" : "coin") + ": " + detectedItems);
+          speechSynthesis.cancel();
+          speechSynthesis.speak(utterance);
+        } else {
+          console.log("Nothing detected, skipping speech synthesis.");
+        }
+      } catch (error) {
+        console.error("API error:", error);
+      } finally {
+        document.getElementById("loadingSpinner").classList.add("hidden");
+      }
+    }
+
+    document.getElementById("startTrialBtn").addEventListener("click", () => {
+      if (!isListening) openCamera();
+    });
+
+    document.getElementById("currencyBtn").addEventListener("click", () => startDetectionMode(0));
+    document.getElementById("coinBtn").addEventListener("click", () => startDetectionMode(1));
+    document.getElementById("stopBtn").addEventListener("click", () => stopDetectionMode());
+
+    document.getElementById('toggleDarkMode').addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+    });
+  </script>
+</body>
+</html>
